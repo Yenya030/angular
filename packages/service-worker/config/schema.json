@@ -68,6 +68,10 @@
               "ignoreSearch": {
                 "type": "boolean",
                 "description": "Whether to ignore the query string in the URL."
+              },
+              "ignoreVary": {
+                "type": "boolean",
+                "description": "Whether to ignore the Vary header when matching cached responses."
               }
             },
             "additionalProperties": false
@@ -149,6 +153,10 @@
               "ignoreSearch": {
                 "type": "boolean",
                 "description": "Whether to ignore the query string in the URL."
+              },
+              "ignoreVary": {
+                "type": "boolean",
+                "description": "Whether to ignore the Vary header when matching cached responses."
               }
             },
             "additionalProperties": false

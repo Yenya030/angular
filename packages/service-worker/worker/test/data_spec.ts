@@ -25,6 +25,7 @@ import {envIsSupported} from '../testing/utils';
     .addFile('/foo.txt', 'this is foo')
     .addFile('/bar.txt', 'this is bar')
     .addFile('/api/test', 'version 1')
+    .addFile('/api-vary/test', 'vary version 1')
     .addFile('/api/a', 'version A')
     .addFile('/api/b', 'version B')
     .addFile('/api/c', 'version C')
@@ -68,6 +69,16 @@ import {envIsSupported} from '../testing/utils';
         maxAge: 5000,
         version: 1,
         cacheQueryOptions: {ignoreVary: true, ignoreSearch: true},
+      },
+      {
+        name: 'testPerfRespectVary',
+        maxSize: 3,
+        strategy: 'performance',
+        patterns: ['^/api-vary/.*$'],
+        timeoutMs: 1000,
+        maxAge: 5000,
+        version: 1,
+        cacheQueryOptions: {ignoreVary: false},
       },
       {
         name: 'testRefresh',
@@ -249,6 +260,16 @@ import {envIsSupported} from '../testing/utils';
         server.clearRequests();
         await makeRequest(scope, '/api/a?v=2');
         server.assertNoOtherRequests();
+      });
+
+      it('passes `ignoreVary: false` through when configured', async () => {
+        await driver.initialized;
+        const matchSpy = spyOn(MockCache.prototype, 'match').and.callThrough();
+        await makeRequest(scope, '/api-vary/test');
+        await makeRequest(scope, '/api-vary/test');
+        expect(matchSpy).toHaveBeenCalledWith(new MockRequest('/api-vary/test'), {
+          ignoreVary: false,
+        });
       });
     });
 

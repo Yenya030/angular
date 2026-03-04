@@ -41,7 +41,7 @@ export interface AssetGroup {
   installMode?: 'prefetch' | 'lazy';
   updateMode?: 'prefetch' | 'lazy';
   resources: {files?: Glob[]; urls?: Glob[]};
-  cacheQueryOptions?: Pick<CacheQueryOptions, 'ignoreSearch'>;
+  cacheQueryOptions?: Pick<CacheQueryOptions, 'ignoreSearch' | 'ignoreVary'>;
 }
 
 /**
@@ -61,5 +61,5 @@ export interface DataGroup {
     strategy?: 'freshness' | 'performance';
     cacheOpaqueResponses?: boolean;
   };
-  cacheQueryOptions?: Pick<CacheQueryOptions, 'ignoreSearch'>;
+  cacheQueryOptions?: Pick<CacheQueryOptions, 'ignoreSearch' | 'ignoreVary'>;
 }
