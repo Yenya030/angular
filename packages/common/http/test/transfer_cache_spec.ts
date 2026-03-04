@@ -22,6 +22,7 @@ import {BehaviorSubject} from 'rxjs';
 import {HttpClient, HttpResponse, provideHttpClient} from '../public_api';
 import {
   BODY,
+  CACHE_KEY,
   HEADERS,
   HTTP_TRANSFER_CACHE_ORIGIN_MAP,
   RESPONSE_TYPE,
@@ -181,24 +182,32 @@ describe('TransferCache', () => {
       makeRequestAndExpectOne('/test-3', 'bar');
 
       const transferState = TestBed.inject(TransferState);
-      expect(JSON.parse(transferState.toJson()) as Record<string, unknown>).toEqual({
-        '2400571479': {
+      const cachedResponses = Object.values(
+        JSON.parse(transferState.toJson()) as Record<string, unknown>,
+      );
+      expect(cachedResponses.length).toBe(2);
+      expect(cachedResponses).toContain(
+        jasmine.objectContaining({
           [BODY]: 'foo',
           [HEADERS]: {},
           [STATUS]: 200,
           [STATUS_TEXT]: 'OK',
           [REQ_URL]: '/test-1',
           [RESPONSE_TYPE]: 'json',
-        },
-        '2400572440': {
+          [CACHE_KEY]: jasmine.any(String),
+        }),
+      );
+      expect(cachedResponses).toContain(
+        jasmine.objectContaining({
           [BODY]: 'buzz',
           [HEADERS]: {},
           [STATUS]: 200,
           [STATUS_TEXT]: 'OK',
           [REQ_URL]: '/test-2',
           [RESPONSE_TYPE]: 'json',
-        },
-      });
+          [CACHE_KEY]: jasmine.any(String),
+        }),
+      );
     });
 
     it(`should use calls from cache when present and application is not stable`, () => {
@@ -329,6 +338,24 @@ describe('TransferCache', () => {
       });
 
       makeRequestAndExpectOne('/test-auth', 'foo');
+    });
+
+    it('should not reuse cache for differing Cookie header values', () => {
+      makeRequestAndExpectOne('/test-cookie', 'user-1', {
+        headers: {Cookie: 'session=user-1'},
+      });
+
+      makeRequestAndExpectOne('/test-cookie', 'user-2', {
+        headers: {Cookie: 'session=user-2'},
+      });
+    });
+
+    it('should not reuse cache for URLs that collide on transfer-cache hash', () => {
+      const collidingUrlA = 'https://example.com/f90usohx';
+      const collidingUrlB = 'https://example.com/6szs7ctv';
+
+      makeRequestAndExpectOne(collidingUrlA, 'payload-a');
+      makeRequestAndExpectOne(collidingUrlB, 'payload-b');
     });
 
     it('should cache POST with the differing body in string form', () => {
@@ -472,7 +499,9 @@ describe('TransferCache', () => {
           headers: {Authorization: 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'},
         });
 
-        makeRequestAndExpectNone('/test-auth');
+        makeRequestAndExpectNone('/test-auth', 'GET', {
+          headers: {Authorization: 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'},
+        });
       });
 
       it(`should cache request that requires proxy authorization when 'includeRequestsWithAuthHeaders' is 'true'`, async () => {
@@ -480,7 +509,19 @@ describe('TransferCache', () => {
           headers: {'Proxy-Authorization': 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'},
         });
 
-        makeRequestAndExpectNone('/test-auth');
+        makeRequestAndExpectNone('/test-auth', 'GET', {
+          headers: {'Proxy-Authorization': 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'},
+        });
+      });
+
+      it(`should not reuse cache when Authorization header value changes`, async () => {
+        makeRequestAndExpectOne('/test-auth-context', 'user-1', {
+          headers: {Authorization: 'Bearer user-1'},
+        });
+
+        makeRequestAndExpectOne('/test-auth-context', 'user-2', {
+          headers: {Authorization: 'Bearer user-2'},
+        });
       });
 
       it('should cache a POST request', () => {

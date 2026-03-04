@@ -94,6 +94,7 @@ export const STATUS = 's';
 export const STATUS_TEXT = 'st';
 export const REQ_URL = 'u';
 export const RESPONSE_TYPE = 'rt';
+export const CACHE_KEY = 'k';
 
 interface TransferHttpResponse {
   /** body */
@@ -108,6 +109,13 @@ interface TransferHttpResponse {
   [REQ_URL]?: string;
   /** responseType */
   [RESPONSE_TYPE]?: HttpRequest<unknown>['responseType'];
+  /** cache key verifier */
+  [CACHE_KEY]?: string;
+}
+
+interface CacheKey {
+  stateKey: StateKey<TransferHttpResponse>;
+  verify: string;
 }
 
 interface CacheOptions extends HttpTransferCacheOptions {
@@ -184,12 +192,17 @@ export function retrieveStateFromCache(
       ? mapRequestOriginUrl(req.url, originMap)
       : req.url;
 
-  const storeKey = makeCacheKey(req, requestUrl);
-  const response = transferState.get(storeKey, null);
+  const cacheKey = makeCacheKey(req, requestUrl);
+  const response = transferState.get(cacheKey.stateKey, null);
 
   const headersToInclude = getHeadersToInclude(options, requestOptions);
 
   if (response) {
+    if (response[CACHE_KEY] !== undefined && response[CACHE_KEY] !== cacheKey.verify) {
+      // Hash collision with different request material: do not reuse this cached response.
+      return null;
+    }
+
     const {
       [BODY]: undecodedBody,
       [RESPONSE_TYPE]: responseType,
@@ -254,7 +267,7 @@ export function transferCacheInterceptorFn(
     typeof ngServerMode !== 'undefined' && ngServerMode && originMap
       ? mapRequestOriginUrl(req.url, originMap)
       : req.url;
-  const storeKey = makeCacheKey(req, requestUrl);
+  const cacheKey = makeCacheKey(req, requestUrl);
 
   // In the following situations we do not want to cache the request
   if (!shouldCacheRequest(req, options)) {
@@ -269,7 +282,7 @@ export function transferCacheInterceptorFn(
       tap((event: HttpEvent<unknown>) => {
         // Only cache successful HTTP responses.
         if (event instanceof HttpResponse) {
-          transferState.set<TransferHttpResponse>(storeKey, {
+          transferState.set<TransferHttpResponse>(cacheKey.stateKey, {
             [BODY]:
               req.responseType === 'arraybuffer' || req.responseType === 'blob'
                 ? toBase64(event.body)
@@ -279,6 +292,7 @@ export function transferCacheInterceptorFn(
             [STATUS_TEXT]: event.statusText,
             [REQ_URL]: requestUrl,
             [RESPONSE_TYPE]: req.responseType,
+            [CACHE_KEY]: cacheKey.verify,
           });
         }
       }),
@@ -319,10 +333,7 @@ function sortAndConcatParams(params: HttpParams | URLSearchParams): string {
     .join('&');
 }
 
-function makeCacheKey(
-  request: HttpRequest<any>,
-  mappedRequestUrl: string,
-): StateKey<TransferHttpResponse> {
+function makeCacheKey(request: HttpRequest<any>, mappedRequestUrl: string): CacheKey {
   // make the params encoded same as a url so it's easy to identify
   const {params, method, responseType} = request;
   const encodedParams = sortAndConcatParams(params);
@@ -334,10 +345,31 @@ function makeCacheKey(
     serializedBody = '';
   }
 
-  const key = [method, responseType, mappedRequestUrl, serializedBody, encodedParams].join('|');
+  // Include hashes of credential-sensitive headers in cache key material so values in these
+  // headers do not alias to the same transfer cache entry.
+  const keyHeaders = ['authorization', 'proxy-authorization', 'cookie']
+    .map((name) => {
+      const values = request.headers.getAll(name);
+      if (values === null) return '';
+      return `${name}:${generateHash(values.join(','))}`;
+    })
+    .filter((entry) => entry !== '')
+    .join('&');
+
+  const key = [
+    method,
+    responseType,
+    mappedRequestUrl,
+    serializedBody,
+    encodedParams,
+    keyHeaders,
+  ].join('|');
   const hash = generateHash(key);
 
-  return makeStateKey(hash);
+  return {
+    stateKey: makeStateKey(hash),
+    verify: generateSecondaryHash(key),
+  };
 }
 
 /**
@@ -355,6 +387,18 @@ function generateHash(value: string): string {
 
   // Force positive number hash.
   // 2147483647 = equivalent of Integer.MAX_VALUE.
+  hash += 2147483647 + 1;
+
+  return hash.toString();
+}
+
+function generateSecondaryHash(value: string): string {
+  let hash = 17;
+
+  for (let i = value.length - 1; i >= 0; i--) {
+    hash = (Math.imul(37, hash) + value.charCodeAt(i)) << 0;
+  }
+
   hash += 2147483647 + 1;
 
   return hash.toString();
