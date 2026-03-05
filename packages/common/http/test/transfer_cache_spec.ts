@@ -38,6 +38,8 @@ interface RequestParams {
   observe?: 'body' | 'response';
   transferCache?: {includeHeaders: string[]} | boolean;
   headers?: {[key: string]: string};
+  withCredentials?: boolean;
+  credentials?: RequestCredentials;
   body?: RequestBody;
 }
 
@@ -181,24 +183,30 @@ describe('TransferCache', () => {
       makeRequestAndExpectOne('/test-3', 'bar');
 
       const transferState = TestBed.inject(TransferState);
-      expect(JSON.parse(transferState.toJson()) as Record<string, unknown>).toEqual({
-        '2400571479': {
+      const cachedResponses = Object.values(
+        JSON.parse(transferState.toJson()) as Record<string, unknown>,
+      );
+      expect(cachedResponses.length).toBe(2);
+      expect(cachedResponses).toContain(
+        jasmine.objectContaining({
           [BODY]: 'foo',
           [HEADERS]: {},
           [STATUS]: 200,
           [STATUS_TEXT]: 'OK',
           [REQ_URL]: '/test-1',
           [RESPONSE_TYPE]: 'json',
-        },
-        '2400572440': {
+        }),
+      );
+      expect(cachedResponses).toContain(
+        jasmine.objectContaining({
           [BODY]: 'buzz',
           [HEADERS]: {},
           [STATUS]: 200,
           [STATUS_TEXT]: 'OK',
           [REQ_URL]: '/test-2',
           [RESPONSE_TYPE]: 'json',
-        },
-      });
+        }),
+      );
     });
 
     it(`should use calls from cache when present and application is not stable`, () => {
@@ -329,6 +337,26 @@ describe('TransferCache', () => {
       });
 
       makeRequestAndExpectOne('/test-auth', 'foo');
+    });
+
+    it('should not reuse cache when withCredentials value changes', () => {
+      makeRequestAndExpectOne('/test-with-credentials', 'with-credentials-true', {
+        withCredentials: true,
+      });
+
+      makeRequestAndExpectOne('/test-with-credentials', 'with-credentials-false', {
+        withCredentials: false,
+      });
+    });
+
+    it('should not reuse cache when credentials mode changes', () => {
+      makeRequestAndExpectOne('/test-credentials-mode', 'credentials-include', {
+        credentials: 'include',
+      });
+
+      makeRequestAndExpectOne('/test-credentials-mode', 'credentials-omit', {
+        credentials: 'omit',
+      });
     });
 
     it('should cache POST with the differing body in string form', () => {

@@ -324,7 +324,7 @@ function makeCacheKey(
   mappedRequestUrl: string,
 ): StateKey<TransferHttpResponse> {
   // make the params encoded same as a url so it's easy to identify
-  const {params, method, responseType} = request;
+  const {params, method, responseType, withCredentials, credentials} = request;
   const encodedParams = sortAndConcatParams(params);
 
   let serializedBody = request.serializeBody();
@@ -334,7 +334,15 @@ function makeCacheKey(
     serializedBody = '';
   }
 
-  const key = [method, responseType, mappedRequestUrl, serializedBody, encodedParams].join('|');
+  const key = [
+    method,
+    responseType,
+    mappedRequestUrl,
+    serializedBody,
+    encodedParams,
+    withCredentials,
+    credentials ?? '',
+  ].join('|');
   const hash = generateHash(key);
 
   return makeStateKey(hash);
