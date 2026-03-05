@@ -25,6 +25,7 @@ import {envIsSupported} from '../testing/utils';
     .addFile('/foo.txt', 'this is foo')
     .addFile('/bar.txt', 'this is bar')
     .addFile('/api/test', 'version 1')
+    .addFile('/api/no-store', 'private data', {'Cache-Control': 'no-store'})
     .addFile('/api/a', 'version A')
     .addFile('/api/b', 'version B')
     .addFile('/api/c', 'version C')
@@ -175,6 +176,14 @@ import {envIsSupported} from '../testing/utils';
         scope.advance(1000);
         expect(await makeRequest(scope, '/api/test')).toEqual('version 1');
         server.assertNoOtherRequests();
+      });
+
+      it('does not cache responses with Cache-Control: no-store', async () => {
+        expect(await makeRequest(scope, '/api/no-store')).toEqual('private data');
+        server.assertSawRequestFor('/api/no-store');
+
+        expect(await makeRequest(scope, '/api/no-store')).toEqual('private data');
+        server.assertSawRequestFor('/api/no-store');
       });
 
       it('does not cache opaque responses by default', async () => {

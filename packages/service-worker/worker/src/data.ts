@@ -545,6 +545,12 @@ export class DataGroup {
       return;
     }
 
+    // Respect explicit no-store responses from the backend.
+    const cacheControl = res.headers.get('Cache-Control');
+    if (cacheControl !== null && /\bno-store\b/i.test(cacheControl)) {
+      return;
+    }
+
     // If caching this response would make the cache exceed its maximum size, evict something
     // first.
     if (lru.size >= this.config.maxSize) {
